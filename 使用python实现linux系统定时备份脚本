@@ -1,0 +1,82 @@
+数据库每日生成备份文件，出于可靠性考虑，打算使用移动硬盘备份RMAN文件
+整体任务可分解为以下步骤
+    在服务器上挂载移动硬盘
+    写定时任务脚本，在RMAN备份之后将备份当日生成的备份文件拷贝至移动硬盘，并使用邮件形式发送操作结果
+
+
+//首先挂载移动硬盘-------------------------------------
+# fdisk -ll
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sdz1               1      243197  1953479871   83  Linux
+# fdisk /dev/sdz
+Command (m for help): m
+Command action
+   a   toggle a bootable flag
+   b   edit bsd disklabel
+   c   toggle the dos compatibility flag
+   d   delete a partition
+   l   list known partition types
+   m   print this menu
+   n   add a new partition
+   o   create a new empty DOS partition table
+   p   print the partition table
+   q   quit without saving changes
+   s   create a new empty Sun disklabel
+   t   change a partition's system id
+   u   change display/entry units
+   v   verify the partition table
+   w   write table to disk and exit
+   x   extra functionality (experts only)
+//这里选择O新建一个硬盘分区
+Command (m for help): o
+//初始化
+# mkfs -t ext3 /dev/sdz1  
+//挂载
+# mount /dev/sdz1 /media
+
+//其次编写定时任务脚本，版本为PYTHON 2.7-----------------------------
+
+#coding: utf-8
+import smtplib
+from email.mime.text import MIMEText
+import os
+import time
+
+currenttime = time.localtime()
+
+Email_test = ''
+try:
+    pathDir =  os.listdir('/backup2/rmanbak')
+
+    for allDir in pathDir:
+        child = os.path.join('%s%s' % ('/backup2/rmanbak/', allDir))
+        statinfo=os.stat(child)
+        if time.localtime(statinfo.st_ctime)[:3] == currenttime[:3]:
+
+            status_code = os.system('cp '+child+' /media/'+allDir)
+            Email_test = Email_test + ' status = '+str(status_code)+'  excute command cp '+child+' /media/'+allDir+'\n'
+
+except Exception , e:
+    Email_test = Email_test  + e + '\n'
+finally:
+    sender = '<EMAIL_addr>'
+    receiver = ['<EMAIL_addr>']
+    
+    subject = 'ORACLE_DATABASE SYNC INFO'
+
+    smtpserver = 'smtp.263.net'
+    username = '<EMAIL_addr>'
+    password = '******'
+    if Email_test == '':
+        Email_test = 'None file has been backup to mobile disk, plz check the linux server!'
+    msg = MIMEText(Email_test,format,'utf-8')
+    msg['Subject'] = subject
+    smtp = smtplib.SMTP()
+    smtp.connect('smtp.263.net')
+    smtp.login(username, password)
+    smtp.sendmail(sender, receiver, msg.as_string())
+    smtp.quit()
+
+
+
+
